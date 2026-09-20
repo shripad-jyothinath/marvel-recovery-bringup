@@ -47,11 +47,3 @@ service recovery-touch /system/bin/touch_probe.sh
     disabled
     oneshot
     seclabel u:r:recovery:s0
-
-# gold: lemonadep "wait before starting vibration and health service"
-service health-hal /system/bin/android.hardware.health-service.qti
-    user root
-    group root
-    disabled
-    oneshot
-    seclabel u:r:recovery:s0

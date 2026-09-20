@@ -309,9 +309,11 @@ TW_EXCLUDE_TWRPAPP := true
 
 # gold: genevn "Advertise EDL mode"
 TW_HAS_DOWNLOAD_MODE := true
-# Motorola uses a dedicated recovery partition on this device
-TW_HAS_NO_RECOVERY_PARTITION := false
 
+# NOTE: marvel HAS a dedicated recovery partition (unlike cybert, which is a
+# vendor_boot recovery: TW_HAS_NO_RECOVERY_PARTITION := true +
+# BOARD_MOVE_RECOVERY_RESOURCES_TO_VENDOR_BOOT). Do NOT set
+# TW_HAS_NO_RECOVERY_PARTITION here - TWRP treats it as "defined = true".
 
 # Inherit proprietary vendor configs
 -include vendor/motorola/marvel/BoardConfigVendor.mk
