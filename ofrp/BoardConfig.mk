@@ -2,6 +2,9 @@
 # Copyright (C) 2026 The LineageOS Project
 # SPDX-License-Identifier: Apache-2.0
 #
+# Motorola Edge 70 Fusion (marvel) — OrangeFox / TWRP device tree
+# Rewritten: correct kernel-module packaging + loading, removed roadstr leftovers.
+#
 
 DEVICE_PATH := device/motorola/marvel
 
@@ -39,29 +42,19 @@ TARGET_ARCH := arm64
 TARGET_ARCH_VARIANT := armv8-2a-dotprod
 TARGET_CPU_ABI := arm64-v8a
 TARGET_CPU_VARIANT := generic
-TARGET_CPU_VARIANT_RUNTIME := oryon
-
-# Audio
-AUDIO_FEATURE_ENABLED_DLKM := true
-AUDIO_FEATURE_ENABLED_DTS_EAGLE := false
-AUDIO_FEATURE_ENABLED_GEF_SUPPORT := true
-AUDIO_FEATURE_ENABLED_HW_ACCELERATED_EFFECTS := false
-AUDIO_FEATURE_ENABLED_INSTANCE_ID := true
-AUDIO_FEATURE_ENABLED_PAL_HIDL := true
-AUDIO_FEATURE_ENABLED_PROXY_DEVICE := true
-BOARD_SUPPORTS_OPENSOURCE_STHAL := true
-BOARD_SUPPORTS_SOUND_TRIGGER := true
-BOARD_USES_ALSA_AUDIO := true
-TARGET_PROVIDES_AUDIO_HAL := true
-TARGET_PROVIDES_LIBAGM := true
-TARGET_PROVIDES_LIBAR_PAL := true
+# NOTE: TARGET_CPU_VARIANT_RUNTIME was "oryon" (an SM8750/Oryon value). marvel is
+# SM7635 "volcano" with Kryo cores and this Soong does not even know "oryon",
+# so it was silently ignored. Leave it unset rather than lying to the compiler.
 
 # Bootloader & Assert Devices
 TARGET_BOOTLOADER_BOARD_NAME := marvel
 TARGET_OTA_ASSERT_DEVICE := marvel,marvel_g,XT2605,XT2605-1,XT2605-2,XT2605-3,XT2605-4
+TARGET_DEVICE_ALT := marvel,XT2605,XT2605-1,XT2605-2,XT2605-3,XT2605-4
 TARGET_NO_BOOTLOADER := true
 
 # Display (1220 x 2712 @ 144Hz)
+TARGET_SCREEN_WIDTH := 1220
+TARGET_SCREEN_HEIGHT := 2712
 TARGET_SCREEN_DENSITY := 440
 
 # Init boot
@@ -80,7 +73,7 @@ TARGET_FS_CONFIG_GEN := $(DEVICE_PATH)/config.fs
 # GPS
 BOARD_VENDOR_QCOM_GPS_LOC_API_HARDWARE := default
 
-# Kernel (Prebuilt GKI 6.1)
+# Kernel (Prebuilt GKI 6.1, android14-6.1)
 BOARD_BOOT_HEADER_VERSION := 4
 BOARD_KERNEL_BASE := 0x00000000
 BOARD_KERNEL_PAGESIZE := 4096
@@ -90,6 +83,7 @@ BOARD_USES_GENERIC_KERNEL_IMAGE := true
 TARGET_KERNEL_VERSION := 6.1
 TARGET_PREBUILT_KERNEL := $(DEVICE_PATH)/prebuilt/kernel
 TARGET_PREBUILT_KERNEL_HEADERS := $(DEVICE_PATH)/prebuilt/kernel-headers.tar.gz
+BOARD_KERNEL_IMAGE_NAME := Image
 
 BOARD_KERNEL_CMDLINE += \
     video=vfb:640x400,bpp=32,memsize=3072000 \
@@ -101,6 +95,7 @@ BOARD_KERNEL_CMDLINE += \
     mem.enable_mglru=1 \
     firmware_class.path=/vendor/firmware_mnt/image
 
+# NOTE: androidboot.roadstr_init_probe=trace_actions removed (roadstr leftover).
 BOARD_BOOTCONFIG += \
     androidboot.hardware=qcom \
     androidboot.memcg=1 \
@@ -110,26 +105,55 @@ BOARD_BOOTCONFIG += \
     androidboot.vendor.qspa=true \
     androidboot.adb_early=1 \
     androidboot.init_fatal_panic=true \
-    androidboot.roadstr_init_probe=trace_actions \
     androidboot.selinux=permissive \
     androidboot.serialconsole=0
 
-BOARD_KERNEL_IMAGE_NAME := Image
-
+# ---------------------------------------------------------------------------
 # Kernel Modules
+#
+# The previous tree only set the *_LOAD lists and never the module lists, and
+# the branch had no modules/ directory, so the recovery image shipped with ZERO
+# .ko files. That is why touch, the volume keys and all USB (adb/MTP/fastbootd)
+# were dead in recovery.
+# ---------------------------------------------------------------------------
+BOARD_VENDOR_KERNEL_MODULES := $(wildcard $(DEVICE_PATH)/modules/vendor_dlkm/*.ko)
 BOARD_SYSTEM_KERNEL_MODULES_LOAD := $(strip $(shell cat $(DEVICE_PATH)/modules.load.system_dlkm 2>/dev/null))
 BOARD_VENDOR_KERNEL_MODULES_LOAD := $(strip $(shell cat $(DEVICE_PATH)/modules.load 2>/dev/null))
 BOARD_SYSTEM_KERNEL_MODULES_BLOCKLIST_FILE := $(DEVICE_PATH)/modules.systemdlkm_blocklist
 BOARD_VENDOR_KERNEL_MODULES_BLOCKLIST_FILE := $(DEVICE_PATH)/modules.blocklist
+
+BOARD_VENDOR_RAMDISK_KERNEL_MODULES := $(wildcard $(DEVICE_PATH)/modules/vendor_boot/*.ko)
 BOARD_VENDOR_RAMDISK_KERNEL_MODULES_LOAD := $(strip $(shell cat $(DEVICE_PATH)/modules.load.vendor_boot 2>/dev/null))
+BOARD_VENDOR_RAMDISK_KERNEL_MODULES_BLOCKLIST_FILE := $(BOARD_VENDOR_KERNEL_MODULES_BLOCKLIST_FILE)
 BOARD_VENDOR_RAMDISK_RECOVERY_KERNEL_MODULES_LOAD := $(strip $(shell cat $(DEVICE_PATH)/modules.load.recovery 2>/dev/null))
+
+# Recovery must be self-contained: package the full vendor module set into the
+# recovery ramdisk and load the recovery list from it. (The vendor ramdisk is
+# not guaranteed to be loaded when ABL boots the recovery partition.)
+BOARD_RECOVERY_KERNEL_MODULES := $(BOARD_VENDOR_KERNEL_MODULES)
+BOARD_RECOVERY_KERNEL_MODULES_LOAD := $(BOARD_VENDOR_RAMDISK_RECOVERY_KERNEL_MODULES_LOAD)
+
 BOOT_KERNEL_MODULES := $(BOARD_VENDOR_RAMDISK_RECOVERY_KERNEL_MODULES_LOAD)
 SYSTEM_KERNEL_MODULES := $(BOARD_SYSTEM_KERNEL_MODULES_LOAD)
+
+# ---------------------------------------------------------------------------
+# TWRP module loading — tell TWRP where the modules are and which to load.
+# `goodix_brl_mmi` / `goodix_fod_mmi` / `rbs_fod_mmi` are in modules.blocklist
+# on purpose (Motorola loads the right touch driver on demand), so recovery has
+# to pull them in explicitly.
+# ---------------------------------------------------------------------------
+TW_LOAD_VENDOR_MODULES_EXCLUDE_GKI := true
+TW_LOAD_VENDOR_BOOT_MODULES := true
+TW_LOAD_VENDOR_MODULES := \
+    "$(wildcard $(DEVICE_PATH)/modules/vendor_dlkm/*.ko) \
+     $(wildcard $(DEVICE_PATH)/modules/vendor_boot/*.ko) \
+     touchscreen_mmi.ko goodix_brl_mmi.ko goodix_fod_mmi.ko rbs_fod_mmi.ko \
+     mmi_info.ko mmi_relay.ko mmi_annotate.ko sensors_class.ko"
 
 # Metadata
 BOARD_USES_METADATA_PARTITION := true
 
-# Platform (Qualcomm SM7750 / SM7635)
+# Platform (Qualcomm SM7635 / "volcano")
 BOARD_USES_QCOM_HARDWARE := true
 TARGET_BOARD_PLATFORM := volcano
 
@@ -139,7 +163,9 @@ BOARD_ROOT_EXTRA_SYMLINKS := \
 # Dynamic Partitions
 -include vendor/lineage/config/BoardConfigReservedSize.mk
 BOARD_BOOTIMAGE_PARTITION_SIZE := 100663296
-BOARD_DTBOIMG_PARTITION_SIZE := 18874368
+# Actual on-device dtbo partition is 0x02100000 = 34603008. The old 37748736
+# produced a dtbo.img larger than the partition (flash would fail).
+BOARD_DTBOIMG_PARTITION_SIZE := 34603008
 BOARD_INIT_BOOT_IMAGE_PARTITION_SIZE := 8388608
 BOARD_RECOVERYIMAGE_PARTITION_SIZE := 134217728
 BOARD_VENDOR_BOOTIMAGE_PARTITION_SIZE := 100663296
@@ -148,10 +174,12 @@ BOARD_BUILD_VENDOR_RAMDISK_IMAGE := true
 BOARD_PRODUCTIMAGE_FILE_SYSTEM_TYPE := ext4
 BOARD_SYSTEM_EXTIMAGE_FILE_SYSTEM_TYPE := erofs
 BOARD_SYSTEMIMAGE_FILE_SYSTEM_TYPE := erofs
+BOARD_SYSTEM_DLKMIMAGE_FILE_SYSTEM_TYPE := ext4
 BOARD_VENDORIMAGE_FILE_SYSTEM_TYPE := erofs
 BOARD_VENDOR_DLKMIMAGE_FILE_SYSTEM_TYPE := ext4
+BOARD_USERDATAIMAGE_FILE_SYSTEM_TYPE := f2fs
 BOARD_SUPER_PARTITION_SIZE := 21474836480
-BOARD_MOT_DP_GROUP_PARTITION_LIST := product system system_ext vendor vendor_dlkm
+BOARD_MOT_DP_GROUP_PARTITION_LIST := product system system_dlkm system_ext vendor vendor_dlkm
 BOARD_SUPER_PARTITION_GROUPS := mot_dp_group
 BOARD_MOT_DP_GROUP_SIZE := 21470642176
 BOARD_FLASH_BLOCK_SIZE := 262144
@@ -171,9 +199,12 @@ TARGET_SYSTEM_EXT_PROP += $(DEVICE_PATH)/system_ext.prop
 TARGET_VENDOR_PROP += $(DEVICE_PATH)/vendor.prop
 
 # Recovery
-# Marvel has a dedicated recovery partition.  Keep the matching prebuilt
-# kernel in recovery.img so the bootloader can execute the recovery ramdisk.
+# marvel's ABL boots the recovery partition as a ramdisk-only boot image and
+# takes the kernel from `boot`. If recovery.img contains a kernel the boot
+# chain is treated as a normal boot and the installed OS starts instead.
+BOARD_EXCLUDE_KERNEL_FROM_RECOVERY_IMAGE := true
 TARGET_RECOVERY_PIXEL_FORMAT := RGBX_8888
+RECOVERY_GRAPHICS_FORCE_USE_LINELENGTH := true
 TARGET_USERIMAGES_USE_EXT4 := true
 TARGET_USERIMAGES_USE_F2FS := true
 TARGET_RECOVERY_FSTAB := $(DEVICE_PATH)/rootdir/etc/fstab.qcom
@@ -214,7 +245,9 @@ WIFI_HIDL_FEATURE_DUAL_INTERFACE := true
 WIFI_HIDL_UNIFIED_SUPPLICANT_SERVICE_RC_ENTRY := true
 WPA_SUPPLICANT_VERSION := VER_0_8_X
 
+# ---------------------------------------------------------------------------
 # OrangeFox Recovery Project (OFRP) Configuration
+# ---------------------------------------------------------------------------
 OF_SCREEN_H := 2712
 OF_STATUS_H := 96
 OF_STATUS_INDENT_LEFT := 48
@@ -241,23 +274,40 @@ FOX_DELETE_AROMAFM := 1
 FOX_REPLACE_TOOLBOX_GETPROP := 1
 OF_USE_TWRP_SAR_DETECT := 1
 
+# ---------------------------------------------------------------------------
 # TWRP UI & Hardware Features
+# ---------------------------------------------------------------------------
 TW_THEME := portrait_hdpi
+TW_FRAMERATE := 120
 TW_EXTRA_LANGUAGES := true
 TW_DEFAULT_LANGUAGE := "en"
+TW_SCREEN_BLANK_ON_BOOT := true
 TW_USE_MODEL_HARDWARE_ID_FOR_DEVICE_ID := true
+TW_MTP_DEVICE := "motorola edge 70 fusion"
 TW_BRIGHTNESS_PATH := "/sys/class/backlight/panel0-backlight/brightness"
 TW_MAX_BRIGHTNESS := 2047
 TW_DEFAULT_BRIGHTNESS := 1200
-TW_INPUT_BLACKLIST := "hbtp_vm"
-TARGET_DEVICE_ALT := "marvel,XT2605,XT2605-1,XT2605-2,XT2605-3,XT2605-4"
+TW_CUSTOM_CPU_TEMP_PATH := /sys/class/thermal/thermal_zone0/temp
+# NOTE: "hbtp_vm" is a MediaTek touch device (copied from the cybert tree).
+# TW_INPUT_BLACKLIST is a list of input-device name *substrings*, not a regex.
+# Left commented out; add entries if a phantom input device shows up.
+# TW_INPUT_BLACKLIST := "goodix_brl_mmi"
 TW_EXCLUDE_APEX := true
 TW_EXCLUDE_PYTHON := true
 TW_INCLUDE_REPACKTOOLS := true
 TW_INCLUDE_RESETPROP := true
 TW_INCLUDE_LIBRESETPROP := true
+TW_INCLUDE_FB2PNG := true
+TW_INCLUDE_NTFS_3G := true
+TW_INCLUDE_FASTBOOTD := true
+TW_USE_TOOLBOX := true
+TW_HAS_DOWNLOAD_MODE := true
+TARGET_USES_MKE2FS := true
+TWRP_INCLUDE_LOGCAT := true
+TARGET_USES_LOGD := true
+TW_EXCLUDE_TWRPAPP := true
 
-# Decryption / Encryption (FBE v2 & Metadata Decryption)
+# Decryption / Encryption (FBE v2 & Metadata decryption)
 TW_INCLUDE_CRYPTO := true
 TW_INCLUDE_CRYPTO_FBE := true
 TW_INCLUDE_FBE_METADATA_DECRYPT := true

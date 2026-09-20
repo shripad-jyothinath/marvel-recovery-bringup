@@ -1,0 +1,41 @@
+#
+# Copyright (C) 2026 The OrangeFox Recovery Project
+# SPDX-License-Identifier: Apache-2.0
+#
+# Recovery init for Motorola Edge 70 Fusion (marvel, Qualcomm SM7635 / volcano)
+#
+# This is auto-imported by init as /init.recovery.qcom.rc (ro.hardware=qcom).
+#
+
+on early-init
+    mkdir /firmware 0771 system system
+    mkdir /vendor/firmware_mnt 0771 system system
+
+on init
+    # Panel backlight (marvel uses the QTI panel0-backlight node)
+    write /sys/class/backlight/panel0-backlight/brightness 1200
+
+    # Qualcomm USB controller used by this device (see vendor.prop
+    # ro.vendor.usb.controller=a600000.dwc3). The default TWRP USB init reads
+    # sys.usb.controller, so set it before adbd is started.
+    setprop sys.usb.controller a600000.dwc3
+    setprop sys.usb.configfs 1
+
+    # Make sure the block-device aliases exist before anything tries to mount.
+    symlink /dev/block/platform/soc/a600000.dwc3 /dev/block/bootdevice
+
+on post-fs
+    # Bring up the touch controller (Goodix BRL) - see touch_probe.sh
+    start recovery-touch
+
+on boot
+    setprop sys.usb.config adb
+
+# Force-load the marvel touch stack. goodix_brl_mmi / goodix_fod_mmi /
+# rbs_fod_mmi are listed in modules.blocklist so they are never auto-loaded.
+service recovery-touch /system/bin/touch_probe.sh
+    user root
+    group root system
+    disabled
+    oneshot
+    seclabel u:r:recovery:s0
