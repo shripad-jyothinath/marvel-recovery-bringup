@@ -1,0 +1,24 @@
+# Legacy crypto compatibility
+persist.vold.ecryptfs_supported=true
+
+# Keyboard
+ro.com.google.ime.kb_pad_port_l=4
+ro.com.google.ime.kb_pad_port_r=4
+
+# --- Recovery / crypto (gold: pissarro system.prop + amethyst) --------------
+# Volume filenames use AES-256-CTS on QTI; without this TWRP's FBE handling
+# mis-detects the cipher and fails to decrypt.
+ro.crypto.volume.filenames_mode=aes-256-cts
+ro.crypto.volume.metadata.method=dm-default-key
+ro.crypto.dm_default_key.options_format.version=2
+
+# USB
+ro.sys.usb.storage.type=mtp
+
+# TEE / keymaster (QTI SM7635: QSEE keymint, no MobiCore/Trustonic)
+ro.vendor.mtk_tee_gp_support=0
+ro.hardware.keystore_desede=true
+
+# Decryption helpers
+ro.hardware.gatekeeper=qti
+ro.hardware.kmsetkey=qti
