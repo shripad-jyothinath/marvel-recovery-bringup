@@ -21,7 +21,7 @@ is_loaded() { grep -q "^$1 " /proc/modules 2>/dev/null; }
 MODULE_DIRS="/vendor/lib/modules /vendor_dlkm/lib/modules /lib/modules /system/lib/modules /system_dlkm/lib/modules"
 
 # Motorola MMI touch chain, in dependency order.
-TOUCH_MODULES="mmi_info mmi_relay mmi_annotate sensors_class touchscreen_mmi goodix_brl_mmi goodix_fod_mmi rbs_fod_mmi"
+TOUCH_MODULES="mmi_annotate mmi_info mmi_relay panel_event_notifier sensors_class touchscreen_mmi goodix_brl_mmi goodix_fod_mmi rbs_fod_mmi"
 
 for mod in $TOUCH_MODULES; do
     is_loaded "$mod" && continue

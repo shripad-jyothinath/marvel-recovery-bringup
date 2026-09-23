@@ -147,9 +147,14 @@ SYSTEM_KERNEL_MODULES := $(BOARD_SYSTEM_KERNEL_MODULES_LOAD)
 # gold: lemonadep "let TWRP load kernel modules"; a16xm "exclude GKI kernel modules"
 TW_LOAD_VENDOR_MODULES_EXCLUDE_GKI := true
 TW_LOAD_VENDOR_BOOT_MODULES := true
+# Modules TWRP loads at runtime from /vendor/lib/modules.
+# Order matters (dependencies first) - from the marvel firmware dump modules.dep.
+# ref: chkndrp/device_xiaomi_amethyst-recovery (same SM7635) uses this exact pattern.
 TW_LOAD_VENDOR_MODULES := \
-    "$(wildcard $(DEVICE_PATH)/modules/vendor_dlkm/*.ko) \
-     $(wildcard $(DEVICE_PATH)/modules/vendor_boot/*.ko)"
+    "mmi_annotate.ko mmi_info.ko mmi_relay.ko panel_event_notifier.ko \
+     sensors_class.ko touchscreen_mmi.ko goodix_brl_mmi.ko \
+     goodix_fod_mmi.ko rbs_fod_mmi.ko mmi_stow.ko \
+     qti_battery_charger.ko adsp_loader_dlkm.ko"
 
 # Metadata
 BOARD_USES_METADATA_PARTITION := true

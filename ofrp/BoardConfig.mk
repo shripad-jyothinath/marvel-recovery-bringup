@@ -147,7 +147,7 @@ TW_LOAD_VENDOR_BOOT_MODULES := true
 TW_LOAD_VENDOR_MODULES := \
     "$(wildcard $(DEVICE_PATH)/modules/vendor_dlkm/*.ko) \
      $(wildcard $(DEVICE_PATH)/modules/vendor_boot/*.ko) \
-     touchscreen_mmi.ko goodix_brl_mmi.ko goodix_fod_mmi.ko rbs_fod_mmi.ko \
+     touchscreen_mmi.ko goodix_brl_mmi.ko goodix_fod_mmi.ko rbs_fod_mmi.ko panel_event_notifier.ko \
      mmi_info.ko mmi_relay.ko mmi_annotate.ko sensors_class.ko"
 
 # Metadata
