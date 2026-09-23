@@ -44,6 +44,8 @@ docs/04-cybert-vs-marvel.md         vendor_boot recovery vs dedicated recovery p
 docs/05-encryption-and-touch.md     crypto framework + touch module chain
 docs/06-self-review.md              critical review of the fixes in this repo
 docs/07-gold-commits.md             reference commits mined from other trees
+docs/08-firmware-dump-findings.md   marvel firmware dump: exact touch chain + decryption stack
+docs/09-rebrand-plan.md             plan to rebrand the SM7635 amethyst tree for marvel
 twrp/                               pure TWRP device tree for marvel
 ofrp/                               OrangeFox (OFRP) device tree for marvel
 scripts/                            apply / install scripts
