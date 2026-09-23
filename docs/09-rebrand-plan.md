@@ -107,23 +107,110 @@ transfers unchanged.
 | prebuilt kernel/dtb | Xiaomi | marvel's `prebuilt/kernel`, `prebuilt/dtb/marvel.dtb` |
 | firmware blobs | `st54l_fw.bin`, Xiaomi firmware_mnt set | marvel's own |
 
-## 9.3 Build
+## 9.5 What the full read of amethyst changed
 
-```sh
-repo init --depth=1 -u https://github.com/TWRP-Test/platform_manifest_twrp_aosp.git -b twrp_16
-repo sync
-# tree at device/motorola/marvel
-source build/envsetup.sh
-lunch fox_marvel-eng        # or twrp_marvel-eng if rebranded to TWRP
-mka recoveryimage
+### (a) amethyst is a **TWRP product with OrangeFox specifics layered on**
+
+```
+AndroidProducts.mk   PRODUCT_MAKEFILES := twrp_amethyst.mk
+                     COMMON_LUNCH_CHOICES := twrp_amethyst-ap2a-eng
+
+twrp_amethyst.mk
+  core_64_bit_only.mk
+  base.mk
+  device/xiaomi/amethyst/device.mk
+  vendor/twrp/config/common.mk
+  device/xiaomi/amethyst/fox_amethyst.mk      <- OFRP specifics
+  PRODUCT_NAME := twrp_$(PRODUCT_DEVICE)
 ```
 
-## 9.4 Order of work
+Build: `lunch twrp_amethyst-ap2a-eng && mka adbd recoveryimage`
+`board-info.txt`: `require board=amethyst|volcano`
 
-1. fork + clone amethyst (done)
-2. rename tree → `device/motorola/marvel`, rebrand identifiers
-3. swap the prebuilt kernel / dtb / partition sizes / dynamic group
-4. replace the touch module list with the marvel chain from `docs/08`
-5. copy the encryption `.rc` + fstab nearly verbatim
-6. drop `odm` from the dynamic partition list and fstab
-7. build under `twrp_16`
+So the rebrand is **`twrp_marvel.mk` + `fox_marvel.mk`**, lunch `twrp_marvel-<release>-eng`,
+`board-info.txt` → `require board=marvel|volcano`.
+
+### (b) amethyst's crypto services are **Thales**, marvel needs **NXP**
+
+`recovery/root/vendor/etc/init/` in amethyst contains:
+
+```
+android.hardware.security.keymint-service.strongbox-thales.rc
+    service vendor.keymint-strongbox /vendor/bin/hw/android.hardware.security.keymint-service.strongbox-thales
+        interface aidl android.hardware.security.sharedsecret.ISharedSecret/strongbox
+        user root; group root system wakelock
+        setenv LD_LIBRARY_PATH /vendor/lib64:/vendor/lib64/hw:/system/lib64:/bin
+        seclabel u:r:recovery:s0
+        task_profiles CPUSET_SP_FOREGROUND
+
+android.hardware.weaver-service.thales.rc
+    service vendor.weaver /vendor/bin/hw/android.hardware.weaver-service.thales
+        user root; group root drmrpc
+
+qseecomd.rc
+    service vendor.qseecomd /vendor/bin/qseecomd
+        socket notify-topology stream 660 system drmrpc
+```
+
+marvel's `config.fs` ships **both** families:
+
+```
+keymint-service.strongbox-nxp   / weaver-service.nxp   / authsecret-service.nxp-qti
+keymint-service.strongbox-thales / weaver-service.thales / authsecret-service.thales-qti
+```
+
+Since the user identifies marvel's stack as **`weaver (nxp) + secure_element + keymint`**, the
+rebrand must use the **NXP** service binaries:
+
+```sh
+service vendor.keymint-strongbox /vendor/bin/hw/android.hardware.security.keymint-service.strongbox-nxp
+service vendor.weaver            /vendor/bin/hw/android.hardware.weaver-service.nxp
+service vendor.authsecret        /vendor/bin/hw/android.hardware.authsecret-service.nxp-qti
+service vendor.secure_element    /vendor/bin/hw/android.hardware.secure_element-service.qti
+```
+
+`vendor.keymint-qti`, `vendor.gatekeeper-qti`, `vendor.ssgtzd`, `vendor.qseecomd` are unchanged.
+
+### (c) amethyst's `vintf/manifest.xml` (recovery, device side)
+
+```xml
+<manifest version="7.0" type="device" target-level="8">
+    android.hidl.manager@1.2 IServiceManager/default
+    android.hidl.token@1.0 ITokenManager/default
+    android.hardware.gatekeeper  IGatekeeper/default
+    android.hardware.secure_element ISecureElement/eSE1
+</manifest>
+```
+
+### (d) ueventd chain
+
+`recovery/root/system/etc/ueventd.rc` imports `vendor/etc/ueventd.rc` **and**
+`vendor/odm/etc/ueventd.rc`. All three files must be carried over (they contain the QTI device
+node permissions + `firmware_directories /vendor/firmware/ /vendor/firmware_mnt/image` + the
+`external_firmware_handler` entries for `trustedvm`/`oemvm` — loader paths will differ per device).
+
+### (e) helper scripts worth porting
+
+| script | purpose | marvel delta |
+|---|---|---|
+| `system/bin/pre_rom_flash.sh` | SPL-date spoof, CPU governor → performance, UFS `auto_hibern8`/`clkgate`/`wb_buf_flush` off, back up OrangeFox to `/tmp/fox_backup.img` | UFS address already correct (`1d84000`) |
+| `system/bin/post_rom_flash_completion.sh` | undo the above | unchanged |
+| `system/bin/runatboot.sh` | wait for `qcom-battery`, force-start `touchfeature-service` | Xiaomi-only → replace with the marvel MMI touch probe |
+| `system/bin/virtual_torch.sh` + `etc/init/virtual_torch.rc` | flashlight workaround (`led:torch_0`, `led:switch_0`) | only if marvel exposes the same LED nodes |
+| `github/workflows/mirror.yml` | GitLab sync (needs secrets) | optional |
+
+## 9.6 Corrected rebrand checklist
+
+1. `device/xiaomi/amethyst` → `device/motorola/marvel`
+2. `twrp_amethyst.mk` → `twrp_marvel.mk` (`PRODUCT_BRAND := motorola`, `PRODUCT_MODEL := motorola edge 70 fusion`, `PRODUCT_MANUFACTURER := motorola`)
+3. `fox_amethyst.mk` → `fox_marvel.mk` (`OF_MAINTAINER := Shripad`, `OF_SCREEN_H := 2712`)
+4. `AndroidProducts.mk` → `twrp_marvel.mk`, lunch `twrp_marvel-<release>-eng`
+5. `board-info.txt` → `require board=marvel|volcano`
+6. `BoardConfig.mk` → partition sizes / group name / dtbo size (table in §9.2), drop `odm` from the dynamic list
+7. `device.mk` → replace `TW_LOAD_VENDOR_MODULES` with the marvel touch chain (drop `xiaomi_touch.ko`, `goodix_core.ko`, `focaltech_touch.ko`, `stm_st54se_gpio.ko`), keep the crypto flags, add `TW_INCLUDE_OMAPI := true`
+8. `recovery.fstab` → drop `odm`, keep dual erofs/ext4, keep wrappedkey on `/metadata` and `/data`
+9. `twrp.flags` → swap `rescue`/`logfs`/Xiaomi names for marvel's partitions
+10. crypto `.rc` → **NXP** strongbox/weaver/authsecret + `secure_element` + `qseecomd` + `ssgtzd` + `keymint-qti` + `gatekeeper-qti`
+11. `runatboot.sh` → marvel MMI touch probe instead of `touchfeature-service`
+12. prebuilts → marvel's `kernel`, `dtb`, firmware blobs
+
