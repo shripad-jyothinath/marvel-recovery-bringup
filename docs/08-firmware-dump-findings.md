@@ -145,14 +145,22 @@ write /sys/bus/platform/devices/1d84000.ufshc/auto_hibern8 0
 
 **Now confirmed.**
 
-## 8.4 Build with the `twrp_16` manifest
+## 8.4 Build with the `twrp-16.0` manifest
 
 To have a chance at working decryption, build against the experimental Android-16 TWRP manifest:
 
 ```sh
-repo init --depth=1 -u https://github.com/TWRP-Test/platform_manifest_twrp_aosp.git -b twrp_16
+repo init --depth=1 -u https://github.com/TWRP-Test/platform_manifest_twrp_aosp.git -b twrp-16.0
 repo sync
 ```
+
+> **Correction:** the branch is `twrp-16.0`, not `twrp_16` — the TWRP-Test repo only has `lvgl`
+> and `twrp-16.0`. (`-b twrp_16` fails at `repo init`.)
+
+The base is AOSP `refs/tags/android-16.0.0_r1` with TWRP forks of `build/make`, `build/soong`,
+`bionic`, `bootable/recovery`, `system/*`. The release configs defined on that tag are
+`ap2a, ap3a, ap4a, bp1a, bp2a` (+ `eng/user/userdebug`), with `aosp_current → bp2a`, so
+`lunch twrp_marvel-ap2a-eng` (or `-bp2a-eng`) is valid.
 
 (`chkndrp`'s amethyst README notes the Android 16 decryption blobs do **not** work with the
 official TWRP 14.1 / OrangeFox 14.1 manifests — only the Android 16 manifest does. The amethyst
@@ -168,5 +176,5 @@ matters.)
 | optional extras | `goodix_fod_mmi.ko`, `mmi_stow.ko`, `rbs_fod_mmi.ko` (present in `modules.load`) |
 | crypto | `TW_INCLUDE_OMAPI := true` + the `weaver/secure_element/keymint` bring-up above |
 | fstab | `/metadata` f2fs + `wrappedkey`; `/data` wrapped-key form |
-| manifest | `TWRP-Test/platform_manifest_twrp_aosp` `twrp_16` |
+| manifest | `TWRP-Test/platform_manifest_twrp_aosp` **`twrp-16.0`** (not `twrp_16`) |
 | `1d84000.ufshc` | confirmed, no longer an unverified assumption |
