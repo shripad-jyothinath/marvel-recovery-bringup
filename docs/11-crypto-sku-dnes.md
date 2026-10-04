@@ -111,7 +111,74 @@ Present in the extracted vendor tree:
 `strongbox-nxp`, `sharedsecret-service.strongbox`, `weaver-service.nxp`, `authsecret-service.nxp-qti`.
 They must be extracted from the full `vendor` (or `odm`) partition — see `docs/10`.
 
-## 11.4 What this means for recovery
+## 11.5 The stock `.rc` files (extracted from `marvel-vendor.tar.zst`)
+
+Two mechanisms in the stock unit files matter and were missing from my first draft:
+
+### (a) `vendor.gatekeeper.is_security_level_spu=0` **enables** the gatekeeper service
+
+`vendor/etc/init/android.hardware.gatekeeper-service-qti.rc`:
+
+```
+service vendor.gatekeeper_default /vendor/bin/hw/android.hardware.gatekeeper-service-qti
+    class early_hal
+    user system
+    group system
+    disabled
+
+on property:vendor.gatekeeper.is_security_level_spu=0
+    enable vendor.gatekeeper_default
+```
+
+The unit is `disabled` and is only *enabled* by that property — which is part of the **stock
+vendor build.prop**. Without `vendor.gatekeeper.is_security_level_spu=0` the gatekeeper service
+never runs and decryption fails.
+
+→ this is exactly the prop that my `docs/10` flagged as *missing from the device tree*. It is not
+cosmetic; it gates gatekeeper.
+
+### (b) StrongBox/Weaver gating is written into the stock units
+
+```
+# android.hardware.security.keymint-service.strongbox.nxp.rc
+service vendor.keymint-strongbox /vendor/bin/hw/android.hardware.security.keymint-service.strongbox-nxp
+    class early_hal
+    user vendor_nxp_strongbox
+    group vendor_nxp_strongbox
+    disabled
+on post-fs && property:ro.boot.strongbox_support=true
+    start vendor.keymint-strongbox
+
+# android.hardware.weaver-service.nxp.rc
+service vendor.weaver_nxp /vendor/bin/hw/android.hardware.weaver-service.nxp-qti
+    class hal
+    user vendor_nxp_weaver
+    group system drmrpc
+    disabled
+on boot && property:ro.boot.strongbox_support=true
+    start vendor.weaver_nxp
+```
+
+Note the service name is **`vendor.weaver_nxp`** (not `vendor.weaver`) and the binary is
+`android.hardware.weaver-service.nxp-qti`.
+
+### (c) Full stock service inventory (from the dump)
+
+| unit | service | binary |
+|---|---|---|
+| `qseecomd.rc` | `vendor.qseecomd` | `bin/qseecomd` |
+| `ssgtzd.rc` | `vendor.ssgtzd` | `bin/ssgtzd` |
+| `android.hardware.security.keymint-service-qti.rc` | `vendor.keymint-qti` | `bin/hw/android.hardware.security.keymint-service-qti` |
+| `android.hardware.security.keymint-service.strongbox.nxp.rc` | `vendor.keymint-strongbox` | `bin/hw/android.hardware.security.keymint-service.strongbox-nxp` |
+| `android.hardware.weaver-service.nxp.rc` | `vendor.weaver_nxp` | `bin/hw/android.hardware.weaver-service.nxp-qti` |
+| `android.hardware.gatekeeper-service-qti.rc` | `vendor.gatekeeper_default` | `bin/hw/android.hardware.gatekeeper-service-qti` |
+| `android.hardware.secure_element-service.qti.rc` | `vendor.secure_element` | `bin/hw/android.hardware.secure_element-service.qti` |
+| `vendor.qti.hardware.qseecom@1.0-service.rc` | `qseecom-service` | `bin/hw/vendor.qti.hardware.qseecom@1.0-service` |
+
+All eight `.rc` files, the seven `bin/hw` binaries, `qseecomd`, `ssgtzd`, 26 libraries and the
+ueventd files were extracted (46 files, 3.56 MB).
+
+## 11.6 What this means for recovery
 
 Recovery must bring up **both** paths, in this order:
 
